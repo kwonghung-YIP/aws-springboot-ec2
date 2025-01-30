@@ -1,0 +1,263 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  deploy a pair of EC2 instance with Launch Template and CloudFormation Helper Scripts
+
+Parameters:
+  InstanceType:
+    Description: EC2 Instance Type
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t3.micro
+  
+  MyIpAddress:
+    Description: My IP Address
+    Type: String
+    Default: 82.35.77.174/32
+    MinLength: "9"
+    MaxLength: "18"
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+  #
+  # Using System Manager Public Parameters as aliases to get the AMI ID
+  # https://aws.amazon.com/blogs/compute/using-system-manager-parameter-as-an-alias-for-ami-id/
+  #
+  ImageId:
+    Description: Amazon Linux 2023 AMI ImageId (eu-north-1)
+    #Type: String
+    #Default: ami-0368b2c10d7184bc7
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+
+  sshKeyName:
+    Description: Name of the ssh keypair
+    Type: String
+    Default: "sshKeyForEC2"
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: "Use my default VpcId if this parameter is not provided"
+    Default: "vpc-0fe6b72cebb18def1"
+
+  availabilityZones:
+    Type: CommaDelimitedList
+    Default: eu-north-1a,eu-north-1b,eu-north-1c
+
+  SubnetIds:
+    Type: CommaDelimitedList
+    Default: subnet-01b85b47ea697c1e4,subnet-026401f613174203a,subnet-081aac5a690b7a1a8
+
+Resources:
+  sshKey:
+    Type: "AWS::EC2::KeyPair"
+    Properties:
+      KeyName: !Ref sshKeyName
+      KeyFormat: pem # pem|ppk 
+      KeyType: ed25519 # rsa|ed25519
+
+  sshSecurityGroup:
+    #
+    # AWS::EC2::SecurityGroup Reference
+    # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ec2-securitygroup.html
+    #
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupName: ssh-security-group
+      GroupDescription: Allowing incoming ssh access from my remote IP
+      SecurityGroupIngress:
+        - CidrIp: !Ref MyIpAddress #either one must be defined CidrIp, CidrIpv6, SourcePrefixListId, SourceSecurityGroupId
+          IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+      #VpcId: #Skip this one to use default VPC
+
+  nginxSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupName: nginx-security-group
+      GroupDescription: Nginx HTTP/S services
+      SecurityGroupIngress:
+        - SourceSecurityGroupId: !GetAtt ALBSecurityGroup.GroupId
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+        - SourceSecurityGroupId: !GetAtt ALBSecurityGroup.GroupId
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+
+  ALBSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupName: ALB-security-group
+      GroupDescription: ALB HTTP/S services
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+
+  nginxLaunchTemplate:
+    Type: "AWS::EC2::LaunchTemplate"
+    Metadata:
+      #
+      # AWS::CloudFormation::Init Reference
+      # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-init.html
+      #
+      AWS::CloudFormation::Init:
+        config:
+          commands:
+            nginx-test-page:
+              command: "echo \"I'm nginx running on ${HOSTNAME}\" > test.txt"
+              cwd: "/usr/share/nginx/html"
+          packages:
+            yum:
+              java-21-amazon-corretto-devel.x86_64: []
+              maven-amazon-corretto21: []
+              nginx: []
+          services:
+            systemd:
+              nginx:
+                enabled: "true"
+                ensureRunning: "true"
+    Properties:
+      LaunchTemplateName: !Sub "${AWS::StackName}-springboot-ec2-launch-template"
+      LaunchTemplateData:
+        InstanceType: !Ref InstanceType
+        ImageId: !Ref ImageId
+        KeyName: !Ref sshKey
+        SecurityGroupIds:
+          - !GetAtt sshSecurityGroup.GroupId
+          - !GetAtt nginxSecurityGroup.GroupId
+        TagSpecifications:
+          - ResourceType: "instance" # instance | volume | network-interface | spot-instances-request
+            Tags:
+              - Key: "Name"
+                Value: "nginx-instance"
+        #
+        # cfn-init reference: https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/cfn-init.html
+        #
+        UserData: !Base64
+          'Fn::Sub': 
+            - >
+              #!/bin/bash -xe
+
+              yum update -y aws-cfn-bootstrap
+
+              /opt/aws/bin/cfn-init -v \
+                --stack ${AWS::StackName} \
+                --region ${AWS::Region} \
+                --resource nginxLaunchTemplate
+            - {}
+
+  nginxInstance1a:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      AvailabilityZone: !Select [0, !Ref availabilityZones]
+      LaunchTemplate:
+        LaunchTemplateId: !Ref nginxLaunchTemplate
+        Version: !GetAtt  nginxLaunchTemplate.DefaultVersionNumber
+        
+  nginxInstance1b:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      AvailabilityZone: !Select [1, !Ref availabilityZones]
+      LaunchTemplate:
+        LaunchTemplateId: !Ref nginxLaunchTemplate
+        Version: !GetAtt nginxLaunchTemplate.DefaultVersionNumber
+
+  nginxInstance1c:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      AvailabilityZone: !Select [2, !Ref availabilityZones]
+      LaunchTemplate:
+        LaunchTemplateId: !Ref nginxLaunchTemplate
+        Version: !GetAtt nginxLaunchTemplate.DefaultVersionNumber
+
+  nginxTargetGroup:
+    #
+    # CloudFormation Reference - AWS::ElasticLoadBalancingV2::TargetGroup
+    # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-elasticloadbalancingv2-targetgroup.html
+    #
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: nginx-ec2-target-group
+      Port: 80
+      Protocol: HTTP # HTTP|HTTPS for Application Load Balancers, TCP|TLS|UPD|TCP_UDP for NLB, ...
+      TargetType: instance # instance|ip|lambda|alb
+      Targets:
+        - Id: !GetAtt nginxInstance1a.InstanceId
+        - Id: !GetAtt nginxInstance1b.InstanceId
+        - Id: !GetAtt nginxInstance1c.InstanceId
+      #HealthCheckEnabled: true # Only can be disabled if TargetType is lambda
+      #HealthCheckIntervalSeconds: 15
+      #HealthCheckTimeoutSeconds: 3
+      #HealthyThresholdCount: 3
+      HealthCheckProtocol: HTTP
+      #HealthCheckPort: 80
+      HealthCheckPath: /test.txt
+      Matcher:
+        HttpCode: "200"
+      VpcId: !Ref VpcId
+
+  nginxALB:
+    #
+    # CloudFormarion Reference - AWS::ElasticLoadBalancingV2::LoadBalancer
+    # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-elasticloadbalancingv2-loadbalancer.html
+    #
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: nginx-application-load-balancer
+      Type: application # application|network|gateway
+      Scheme: internet-facing # internet-facing|internal
+      SecurityGroups: 
+        - !GetAtt ALBSecurityGroup.GroupId
+      SubnetMappings:
+        - SubnetId: !Select [0, !Ref SubnetIds]
+        - SubnetId: !Select [1, !Ref SubnetIds]
+        - SubnetId: !Select [2, !Ref SubnetIds]
+
+  ALBHttpListener:
+    #
+    # CloudFormation Reference - AWS::ElasticLoadBalancingV2::Listener
+    # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-elasticloadbalancingv2-listener.html
+    #
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !GetAtt nginxALB.LoadBalancerArn
+      Protocol: HTTP
+      Port: 80
+      DefaultActions:
+        - Type: forward # forward|authenticate-oidc|authenticate-cognito|redirect|fixed-response
+          TargetGroupArn: !Ref nginxTargetGroup # for forward type
+          # AuthenticateOidcConfig # for authenticate-oidc type [HTTPS Listeners]
+          # AuthenticateCognitoConfig # for authenticate-cognito type [HTTPS Listeners]
+          # RedirectConfig # for redirect type
+          # FixedResponseConfig # for fixed-response type
+
+Outputs:
+  sshKeyPairId:
+    Value: !GetAtt sshKey.KeyPairId
+
+  ec2SshCommand1a:
+    Description: ssh command to nginx instance on AZ eu-north-1a
+    Value: !Sub 
+      - "ssh -o 'StrictHostKeyChecking no' ec2-user@${PublicIp}"
+      - PublicIp: !GetAtt nginxInstance1a.PublicIp
+
+  ec2SshCommand1b:
+    Description: ssh command to nginx instance on AZ eu-north-1b
+    Value: !Sub 
+      - "ssh -o 'StrictHostKeyChecking no' ec2-user@${PublicIp}"
+      - PublicIp: !GetAtt nginxInstance1b.PublicIp
+
+  ALBDNSName:
+    Description: Testing URL to Application Load Balancer
+    Value: !Sub 
+      - "http://${ALBDnsName}/test.txt"
+      - ALBDnsName: !GetAtt nginxALB.DNSName
+
