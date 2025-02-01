@@ -12,13 +12,13 @@
 
 ## Launch the stack (launch-stack.sh) 
 ```bash
-SSH_KEY_NAME=sshKeySpringbootEC2
+SSH_KEY_NAME=sshKeyNginxEC2
 CFN_EXECUTION_ROLE_ARN=~Replace with your cloudformation execution role ARN~
 
 aws cloudformation deploy \
     --profile cloudformation-deployment \
     --template-file template.yaml \
-    --stack-name springboot-ec2-stack \
+    --stack-name nginx-ec2-stack \
     --role-arn ${CFN_EXECUTION_ROLE_ARN} \
     --parameter-overrides sshKeyName=${SSH_KEY_NAME} #--debug
 
@@ -40,7 +40,7 @@ chmod 700 ~/.ssh/id_ed25519
 # Report the Stack Output, include the public DNS of the Application Load Balancer
 aws cloudformation describe-stacks \
     --profile cloudformation-deployment \
-    --stack-name springboot-ec2-stack \
+    --stack-name nginx-ec2-stack \
     --query 'Stacks[0].Outputs[].OutputValue' \
     --no-cli-pager
 ```
@@ -49,7 +49,7 @@ aws cloudformation describe-stacks \
 ```bash
 aws cloudformation delete-stack \
     --profile cloudformation-deployment \
-    --stack-name springboot-ec2-stack
+    --stack-name nginx-ec2-stack
 ```
 
 ## Reference

@@ -1,6 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  deploy a pair of EC2 instance with Launch Template and CloudFormation Helper Scripts
+  Deploy 3 Nginx EC2 instances in 3 different AZ in eu-north-1 region,
+  and an ALB for public access. 
 
 Parameters:
   InstanceType:
@@ -125,7 +126,7 @@ Resources:
                 enabled: "true"
                 ensureRunning: "true"
     Properties:
-      LaunchTemplateName: !Sub "${AWS::StackName}-springboot-ec2-launch-template"
+      LaunchTemplateName: !Sub "${AWS::StackName}-nginx-ec2-launch-template"
       LaunchTemplateData:
         InstanceType: !Ref InstanceType
         ImageId: !Ref ImageId
@@ -254,6 +255,12 @@ Outputs:
     Value: !Sub 
       - "ssh -o 'StrictHostKeyChecking no' ec2-user@${PublicIp}"
       - PublicIp: !GetAtt nginxInstance1b.PublicIp
+
+  ec2SshCommand1c:
+    Description: ssh command to nginx instance on AZ eu-north-1c
+    Value: !Sub 
+      - "ssh -o 'StrictHostKeyChecking no' ec2-user@${PublicIp}"
+      - PublicIp: !GetAtt nginxInstance1c.PublicIp
 
   ALBDNSName:
     Description: Testing URL to Application Load Balancer

@@ -1,0 +1,282 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  deploy a pair of EC2 instance with Launch Template and CloudFormation Helper Scripts
+
+Parameters:
+  InstanceType:
+    Description: EC2 Instance Type
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t3.micro
+  
+  MyIpAddress:
+    Description: My IP Address
+    Type: String
+    Default: 82.35.77.174/32
+    MinLength: "9"
+    MaxLength: "18"
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+  #
+  # Using System Manager Public Parameters as aliases to get the AMI ID
+  # https://aws.amazon.com/blogs/compute/using-system-manager-parameter-as-an-alias-for-ami-id/
+  #
+  ImageId:
+    Description: Amazon Linux 2023 AMI ImageId (eu-north-1)
+    #Type: String
+    #Default: ami-0368b2c10d7184bc7
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+
+  sshKeyName:
+    Description: Name of the ssh keypair
+    Type: String
+    Default: "sshKeyForEC2"
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: "Use my default VpcId if this parameter is not provided"
+    Default: "vpc-0fe6b72cebb18def1"
+
+Mappings:
+  RegionConfigMap:
+    eu-north-1:
+      AZ: [ eu-north-1a, eu-north-1b,eu-north-1c ]
+      SubnetId:
+        - subnet-01b85b47ea697c1e4
+        - subnet-026401f613174203a
+        - subnet-081aac5a690b7a1a8
+
+Conditions:
+  LaunchALB: !Equals ["1","2"]
+
+Resources:
+  sshKey:
+    Type: "AWS::EC2::KeyPair"
+    Properties:
+      KeyName: !Ref sshKeyName
+      KeyFormat: pem # pem|ppk 
+      KeyType: ed25519 # rsa|ed25519
+
+  sshSecurityGroup:
+    #
+    # AWS::EC2::SecurityGroup Reference
+    # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ec2-securitygroup.html
+    #
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupName: ssh-security-group
+      GroupDescription: Allowing incoming ssh access from my remote IP
+      SecurityGroupIngress:
+        - CidrIp: !Ref MyIpAddress #either one must be defined CidrIp, CidrIpv6, SourcePrefixListId, SourceSecurityGroupId
+          IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+      #VpcId: #Skip this one to use default VPC
+
+  springbootSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupName: springboot-security-group
+      GroupDescription: Springboot HTTP port
+      SecurityGroupIngress:
+        - SourceSecurityGroupId: !GetAtt ALBSecurityGroup.GroupId
+          IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+
+  ALBSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupName: ALB-security-group
+      GroupDescription: ALB HTTP/S services
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 8080
+
+  springbootLaunchTemplate:
+    Type: "AWS::EC2::LaunchTemplate"
+    Metadata:
+      #
+      # AWS::CloudFormation::Init Reference
+      # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-init.html
+      #
+      AWS::CloudFormation::Init:
+        config:
+          packages:
+            yum:
+              ruby3.2.x86_64: []
+              java-21-amazon-corretto-devel.x86_64: []
+              maven-amazon-corretto21: []
+          files:
+            "/home/ec2-user/install":
+              source: !Sub 
+                - "https://${bucket_name}.s3.${region_identifier}.amazonaws.com/${version}/install"
+                - bucket_name: aws-codedeploy-eu-north-1
+                  region_identifier: eu-north-1
+                  version: latest
+              mode: "000755"
+          commands:
+            install-codedeploy-agent:
+              command: "./install auto"
+              cwd: "/home/ec2-user"
+          services:
+            systemd:
+              codedeploy-agent:
+                enabled: "true"
+                ensureRunning: "true"
+    Properties:
+      LaunchTemplateName: !Sub "${AWS::StackName}-springboot-ec2-launch-template"
+      LaunchTemplateData:
+        InstanceType: !Ref InstanceType
+        ImageId: !Ref ImageId
+        KeyName: !Ref sshKey
+        SecurityGroupIds:
+          - !GetAtt sshSecurityGroup.GroupId
+          - !GetAtt springbootSecurityGroup.GroupId
+        TagSpecifications:
+          - ResourceType: "instance" # instance | volume | network-interface | spot-instances-request
+            Tags:
+              - Key: "Name"
+                Value: "springboot-instance"
+        #
+        # cfn-init reference: https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/cfn-init.html
+        #
+        UserData: !Base64
+          'Fn::Sub': 
+            - >
+              #!/bin/bash -xe
+
+              yum update -y aws-cfn-bootstrap
+
+              /opt/aws/bin/cfn-init -v \
+                --stack ${AWS::StackName} \
+                --region ${AWS::Region} \
+                --resource springbootLaunchTemplate
+            - {}
+
+  springbootEC21a:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      AvailabilityZone: !Select [0, !FindInMap [RegionConfigMap,!Ref "AWS::Region", AZ]]
+      LaunchTemplate:
+        LaunchTemplateId: !Ref springbootLaunchTemplate
+        Version: !GetAtt springbootLaunchTemplate.DefaultVersionNumber
+
+  springbootEC21b:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      AvailabilityZone: !Select [1, !FindInMap [RegionConfigMap,!Ref "AWS::Region", AZ]]
+      LaunchTemplate:
+        LaunchTemplateId: !Ref springbootLaunchTemplate
+        Version: !GetAtt springbootLaunchTemplate.DefaultVersionNumber
+
+  springbootEC21c:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      AvailabilityZone: !Select [2, !FindInMap [RegionConfigMap,!Ref "AWS::Region", AZ]]
+      LaunchTemplate:
+        LaunchTemplateId: !Ref springbootLaunchTemplate
+        Version: !GetAtt springbootLaunchTemplate.DefaultVersionNumber
+
+  springbootTargetGroup:
+    #
+    # CloudFormation Reference - AWS::ElasticLoadBalancingV2::TargetGroup
+    # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-elasticloadbalancingv2-targetgroup.html
+    #
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: springboot-ec2-target-group
+      Port: 8080
+      Protocol: HTTP # HTTP|HTTPS for Application Load Balancers, TCP|TLS|UPD|TCP_UDP for NLB, ...
+      TargetType: instance # instance|ip|lambda|alb
+      Targets:
+        - Id: !GetAtt springbootEC21a.InstanceId
+        - Id: !GetAtt springbootEC21b.InstanceId
+        - Id: !GetAtt springbootEC21c.InstanceId
+      #HealthCheckEnabled: true # Only can be disabled if TargetType is lambda
+      #HealthCheckIntervalSeconds: 15
+      #HealthCheckTimeoutSeconds: 3
+      #HealthyThresholdCount: 3
+      HealthCheckProtocol: HTTP
+      HealthCheckPort: 8080
+      HealthCheckPath: /
+      Matcher:
+        HttpCode: "200"
+      VpcId: !Ref VpcId
+
+  springbootALB:
+    #
+    # CloudFormarion Reference - AWS::ElasticLoadBalancingV2::LoadBalancer
+    # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-elasticloadbalancingv2-loadbalancer.html
+    #
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Condition: LaunchALB
+    Properties:
+      Name: springboot-ALB
+      Type: application # application|network|gateway
+      Scheme: internet-facing # internet-facing|internal
+      SecurityGroups: 
+        - !GetAtt ALBSecurityGroup.GroupId
+      SubnetMappings:
+        - SubnetId: !Select [0, !FindInMap [RegionConfigMap,!Ref "AWS::Region", SubnetId]]
+        - SubnetId: !Select [1, !FindInMap [RegionConfigMap,!Ref "AWS::Region", SubnetId]]
+        - SubnetId: !Select [2, !FindInMap [RegionConfigMap,!Ref "AWS::Region", SubnetId]]
+
+  ALBHttpListener:
+    #
+    # CloudFormation Reference - AWS::ElasticLoadBalancingV2::Listener
+    # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-elasticloadbalancingv2-listener.html
+    #
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: LaunchALB
+    Properties:
+      LoadBalancerArn: !GetAtt springbootALB.LoadBalancerArn
+      Protocol: HTTP
+      Port: 8080
+      DefaultActions:
+        - Type: forward # forward|authenticate-oidc|authenticate-cognito|redirect|fixed-response
+          TargetGroupArn: !Ref springbootTargetGroup # for forward type
+          # AuthenticateOidcConfig # for authenticate-oidc type [HTTPS Listeners]
+          # AuthenticateCognitoConfig # for authenticate-cognito type [HTTPS Listeners]
+          # RedirectConfig # for redirect type
+          # FixedResponseConfig # for fixed-response type
+
+  codeDeployApplication:
+    Type: AWS::CodeDeploy::Application
+    Properties:
+      ApplicationName: springboot-application
+      ComputePlatform: Server # Server|Lambda|ECS
+
+Outputs:
+  sshKeyPairId:
+    Value: !GetAtt sshKey.KeyPairId
+
+  ec2Instane1aSsh:
+    Description: ssh command to springboot instance on AZ eu-north-1a
+    Value: !Sub 
+      - "ssh -o 'StrictHostKeyChecking no' ec2-user@${PublicIp}"
+      - PublicIp: !GetAtt springbootEC21a.PublicIp
+
+  ec2Instane1bSsh:
+    Description: ssh command to springboot instance on AZ eu-north-1b
+    Value: !Sub 
+      - "ssh -o 'StrictHostKeyChecking no' ec2-user@${PublicIp}"
+      - PublicIp: !GetAtt springbootEC21b.PublicIp
+
+  ec2Instane1cSsh:
+    Description: ssh command to springboot instance on AZ eu-north-1c
+    Value: !Sub 
+      - "ssh -o 'StrictHostKeyChecking no' ec2-user@${PublicIp}"
+      - PublicIp: !GetAtt springbootEC21c.PublicIp
+
+  ALBDNSName:
+    Condition: LaunchALB
+    Description: Testing URL to Application Load Balancer
+    Value: !Sub 
+      - "http://${ALBDnsName}/"
+      - ALBDnsName: !GetAtt springbootALB.DNSName
+

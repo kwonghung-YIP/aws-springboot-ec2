@@ -10,6 +10,11 @@ aws cloudformation deploy \
     --role-arn ${CFN_EXECUTION_ROLE_ARN} \
     --parameter-overrides sshKeyName=${SSH_KEY_NAME} #--debug
 
+if [ $? -ne 0 ]
+then
+    exit 1
+fi
+
 # To get the new keypair Id generated in the cloudformation template
 KEYPAIR_ID=`aws ec2 describe-key-pairs \
     --filters Name=key-name,Values=${SSH_KEY_NAME} \
