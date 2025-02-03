@@ -160,7 +160,7 @@ Resources:
               /opt/aws/bin/cfn-init -v \
                 --stack ${AWS::StackName} \
                 --region ${AWS::Region} \
-                --resource springbootLaunchTemplate
+                --resource SpringbootLaunchTemplate
             - {}
 
   SpringbootEC21a:
@@ -250,6 +250,19 @@ Resources:
           # RedirectConfig # for redirect type
           # FixedResponseConfig # for fixed-response type
 
+  SpringbootArtifactsBucket:
+    Type: AWS::S3::Bucket
+    # Bucket cannot be deleted if it is not empty
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Retain
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
   CodeDeployServiceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -263,6 +276,8 @@ Resources:
             Principal:
               Service:
                 - codedeploy.amazonaws.com
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole
 
   CodeDeployApplication:
     Type: AWS::CodeDeploy::Application

@@ -1,2 +1,51 @@
 version: 0.0
 os: linux
+
+files:
+  - source: hooks/
+    destination: /application/scripts
+permissions:
+  - object: /application/scripts
+    pattern: "*.sh"
+    mode: 744
+file_exists_behaviour: OVERWRITE
+hooks:
+  #
+  # Hooks ordering for in-place deployments with load balancer
+  #
+  BeforeBlockTraffic:
+    - location: hooks/00-block-traffic-before.sh
+      timeout: 120
+
+  AfterBlockTraffic:
+    - location: hooks/01-block-traffic-after.sh
+      timeout: 120
+
+  ApplicationStop:
+    - location: hooks/02-application-stop.sh
+      timeout: 120
+
+  BeforeInstall:
+    - location: hooks/03-install-before.sh
+      timeout: 120
+
+  AfterInstall:
+    - location: hooks/04-install-after.sh
+      timeout: 120
+
+  ApplicationStart:
+    - location: hooks/05-application-start.sh
+      timeout: 120
+
+  ValidateService:
+    - location: hooks/06-validate-service.sh
+      timeout: 120
+
+  BeforeAllowTraffic:
+    - location: hooks/07-allow-traffic-before.sh
+      timeout: 120
+
+  AfterAllowTraffic:
+    - location: hooks/08-allow-traffic-after.sh
+      timeout: 120
+  

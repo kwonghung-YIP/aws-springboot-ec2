@@ -3,16 +3,13 @@
 SSH_KEY_NAME=sshKeySpringbootEC2
 CFN_EXECUTION_ROLE_ARN=arn:aws:iam::796973491384:role/springboot-ec2-cloudformation-execution
 
-#aws s3 mb s3://springboot-ec2-stack-artifacts-bucket \
-#    --profile cloudformation-deployment
-
 aws cloudformation deploy \
     --profile cloudformation-deployment \
     --template-file app-stack.yaml \
     --stack-name springboot-ec2-stack \
     --capabilities CAPABILITY_IAM \
     --role-arn ${CFN_EXECUTION_ROLE_ARN} \
-    --parameter-overrides sshKeyName=${SSH_KEY_NAME} #--debug
+    --parameter-overrides SshKeyName=${SSH_KEY_NAME} #--debug
 
 if [ $? -ne 0 ]
 then
