@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  deploy a pair of EC2 instance with Launch Template and CloudFormation Helper Scripts
+  Create 3 springboot EC2 instances + ALB, deploy the application with CodeDeploy
 
 Parameters:
   InstanceType:
@@ -29,7 +29,7 @@ Parameters:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
 
-  sshKeyName:
+  SshKeyName:
     Description: Name of the ssh keypair
     Type: String
     Default: "sshKeyForEC2"
@@ -38,6 +38,11 @@ Parameters:
     Type: AWS::EC2::VPC::Id
     Description: "Use my default VpcId if this parameter is not provided"
     Default: "vpc-0fe6b72cebb18def1"
+
+  ArtifactsBucketName:
+    Description: Artifacts Bucket Name for CodeDeploy
+    Type: String
+    Default: "springboot-ec2-stack-artifacts-bucket"
 
 Mappings:
   RegionConfigMap:
@@ -52,14 +57,14 @@ Conditions:
   LaunchALB: !Equals ["1","2"]
 
 Resources:
-  sshKey:
+  SshKey:
     Type: "AWS::EC2::KeyPair"
     Properties:
-      KeyName: !Ref sshKeyName
+      KeyName: !Ref SshKeyName
       KeyFormat: pem # pem|ppk 
       KeyType: ed25519 # rsa|ed25519
 
-  sshSecurityGroup:
+  SshSecurityGroup:
     #
     # AWS::EC2::SecurityGroup Reference
     # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ec2-securitygroup.html
@@ -75,7 +80,7 @@ Resources:
           ToPort: 22
       #VpcId: #Skip this one to use default VPC
 
-  springbootSecurityGroup:
+  SpringbootSecurityGroup:
     Type: "AWS::EC2::SecurityGroup"
     Properties:
       GroupName: springboot-security-group
@@ -97,7 +102,7 @@ Resources:
           FromPort: 80
           ToPort: 8080
 
-  springbootLaunchTemplate:
+  SpringbootLaunchTemplate:
     Type: "AWS::EC2::LaunchTemplate"
     Metadata:
       #
@@ -133,10 +138,10 @@ Resources:
       LaunchTemplateData:
         InstanceType: !Ref InstanceType
         ImageId: !Ref ImageId
-        KeyName: !Ref sshKey
+        KeyName: !Ref SshKey
         SecurityGroupIds:
-          - !GetAtt sshSecurityGroup.GroupId
-          - !GetAtt springbootSecurityGroup.GroupId
+          - !GetAtt SshSecurityGroup.GroupId
+          - !GetAtt SpringbootSecurityGroup.GroupId
         TagSpecifications:
           - ResourceType: "instance" # instance | volume | network-interface | spot-instances-request
             Tags:
@@ -158,31 +163,31 @@ Resources:
                 --resource springbootLaunchTemplate
             - {}
 
-  springbootEC21a:
+  SpringbootEC21a:
     Type: "AWS::EC2::Instance"
     Properties:
       AvailabilityZone: !Select [0, !FindInMap [RegionConfigMap,!Ref "AWS::Region", AZ]]
       LaunchTemplate:
-        LaunchTemplateId: !Ref springbootLaunchTemplate
-        Version: !GetAtt springbootLaunchTemplate.DefaultVersionNumber
+        LaunchTemplateId: !Ref SpringbootLaunchTemplate
+        Version: !GetAtt SpringbootLaunchTemplate.DefaultVersionNumber
 
-  springbootEC21b:
+  SpringbootEC21b:
     Type: "AWS::EC2::Instance"
     Properties:
       AvailabilityZone: !Select [1, !FindInMap [RegionConfigMap,!Ref "AWS::Region", AZ]]
       LaunchTemplate:
-        LaunchTemplateId: !Ref springbootLaunchTemplate
-        Version: !GetAtt springbootLaunchTemplate.DefaultVersionNumber
+        LaunchTemplateId: !Ref SpringbootLaunchTemplate
+        Version: !GetAtt SpringbootLaunchTemplate.DefaultVersionNumber
 
-  springbootEC21c:
+  SpringbootEC21c:
     Type: "AWS::EC2::Instance"
     Properties:
       AvailabilityZone: !Select [2, !FindInMap [RegionConfigMap,!Ref "AWS::Region", AZ]]
       LaunchTemplate:
-        LaunchTemplateId: !Ref springbootLaunchTemplate
-        Version: !GetAtt springbootLaunchTemplate.DefaultVersionNumber
+        LaunchTemplateId: !Ref SpringbootLaunchTemplate
+        Version: !GetAtt SpringbootLaunchTemplate.DefaultVersionNumber
 
-  springbootTargetGroup:
+  SpringbootTargetGroup:
     #
     # CloudFormation Reference - AWS::ElasticLoadBalancingV2::TargetGroup
     # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-elasticloadbalancingv2-targetgroup.html
@@ -194,9 +199,9 @@ Resources:
       Protocol: HTTP # HTTP|HTTPS for Application Load Balancers, TCP|TLS|UPD|TCP_UDP for NLB, ...
       TargetType: instance # instance|ip|lambda|alb
       Targets:
-        - Id: !GetAtt springbootEC21a.InstanceId
-        - Id: !GetAtt springbootEC21b.InstanceId
-        - Id: !GetAtt springbootEC21c.InstanceId
+        - Id: !GetAtt SpringbootEC21a.InstanceId
+        - Id: !GetAtt SpringbootEC21b.InstanceId
+        - Id: !GetAtt SpringbootEC21c.InstanceId
       #HealthCheckEnabled: true # Only can be disabled if TargetType is lambda
       #HealthCheckIntervalSeconds: 15
       #HealthCheckTimeoutSeconds: 3
@@ -208,7 +213,7 @@ Resources:
         HttpCode: "200"
       VpcId: !Ref VpcId
 
-  springbootALB:
+  SpringbootALB:
     #
     # CloudFormarion Reference - AWS::ElasticLoadBalancingV2::LoadBalancer
     # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-elasticloadbalancingv2-loadbalancer.html
@@ -234,49 +239,87 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Condition: LaunchALB
     Properties:
-      LoadBalancerArn: !GetAtt springbootALB.LoadBalancerArn
+      LoadBalancerArn: !GetAtt SpringbootALB.LoadBalancerArn
       Protocol: HTTP
       Port: 8080
       DefaultActions:
         - Type: forward # forward|authenticate-oidc|authenticate-cognito|redirect|fixed-response
-          TargetGroupArn: !Ref springbootTargetGroup # for forward type
+          TargetGroupArn: !Ref SpringbootTargetGroup # for forward type
           # AuthenticateOidcConfig # for authenticate-oidc type [HTTPS Listeners]
           # AuthenticateCognitoConfig # for authenticate-cognito type [HTTPS Listeners]
           # RedirectConfig # for redirect type
           # FixedResponseConfig # for fixed-response type
 
-  codeDeployApplication:
+  CodeDeployServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: CodeDeploy Service Role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - "sts:AssumeRole"
+            Principal:
+              Service:
+                - codedeploy.amazonaws.com
+
+  CodeDeployApplication:
     Type: AWS::CodeDeploy::Application
     Properties:
       ApplicationName: springboot-application
       ComputePlatform: Server # Server|Lambda|ECS
 
+  CodeDeployDeploymentGroup:
+    #
+    # AWS::CodeDeploy::DeploymentGroup Reference
+    # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-codedeploy-deploymentgroup-s3location.html
+    #
+    Type: AWS::CodeDeploy::DeploymentGroup
+    Properties:
+      ApplicationName: !Ref CodeDeployApplication
+      #Deployment:
+      #  Description: "Springboot EC2 DeploymentGroup"
+      #  IgnoreApplicationStopFailures: "false"
+      #  Revision:
+      #    RevisionType: S3 # S3|GitHub|String|AppSpecContent
+      #    S3Location:
+      #      Bucket: !Ref ArtifactsBucketName
+      #      BundleType: zip # tar|tgz|zip|YAML|JSON
+      #      Key: application.zip
+      #DeploymentConfigName: CodeDeployDefault.OneAtATime
+      Ec2TagFilters:
+        - Type: KEY_AND_VALUE # KEY_ONLY|VALUE_ONLY|KEY_AND_VALUE
+          Key: Name
+          Value: springboot-instance
+      ServiceRoleArn: !GetAtt CodeDeployServiceRole.Arn
+
 Outputs:
   sshKeyPairId:
-    Value: !GetAtt sshKey.KeyPairId
+    Value: !GetAtt SshKey.KeyPairId
 
   ec2Instane1aSsh:
     Description: ssh command to springboot instance on AZ eu-north-1a
     Value: !Sub 
       - "ssh -o 'StrictHostKeyChecking no' ec2-user@${PublicIp}"
-      - PublicIp: !GetAtt springbootEC21a.PublicIp
+      - PublicIp: !GetAtt SpringbootEC21a.PublicIp
 
   ec2Instane1bSsh:
     Description: ssh command to springboot instance on AZ eu-north-1b
     Value: !Sub 
       - "ssh -o 'StrictHostKeyChecking no' ec2-user@${PublicIp}"
-      - PublicIp: !GetAtt springbootEC21b.PublicIp
+      - PublicIp: !GetAtt SpringbootEC21b.PublicIp
 
   ec2Instane1cSsh:
     Description: ssh command to springboot instance on AZ eu-north-1c
     Value: !Sub 
       - "ssh -o 'StrictHostKeyChecking no' ec2-user@${PublicIp}"
-      - PublicIp: !GetAtt springbootEC21c.PublicIp
+      - PublicIp: !GetAtt SpringbootEC21c.PublicIp
 
   ALBDNSName:
     Condition: LaunchALB
     Description: Testing URL to Application Load Balancer
     Value: !Sub 
       - "http://${ALBDnsName}/"
-      - ALBDnsName: !GetAtt springbootALB.DNSName
+      - ALBDnsName: !GetAtt SpringbootALB.DNSName
 
