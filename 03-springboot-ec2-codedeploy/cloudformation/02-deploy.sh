@@ -24,12 +24,12 @@ cp target/*.jar ../codedeploy
 
 cd ../cloudformation
 
-rm application.tar
+rm application.tar*
 
 #zip application.zip ../codedeploy/*
 tar -cvf application.tar -C ../codedeploy .
 
-aws s3 cp ./application.zip s3://${BUCKET_NAME}/application.tar
+aws s3 cp ./application.tar s3://${BUCKET_NAME}/application.tar
 
 DEPLOY_ID=`aws deploy create-deployment \
     --profile cloudformation-deployment \

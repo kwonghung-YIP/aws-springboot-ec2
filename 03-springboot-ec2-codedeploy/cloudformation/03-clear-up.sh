@@ -13,8 +13,14 @@ aws cloudformation delete-stack \
     --profile cloudformation-deployment \
     --stack-name ${STACK_NAME}
 
-aws s3 rm s3://${BUCKET_NAME} --recursive
+# for not versioned bucket
+#aws s3 rm s3://${BUCKET_NAME} --recursive
 
-sleep 15
+aws s3api delete-objects --bucket ${BUCKET_NAME} \
+  --delete "$(aws s3api list-object-versions \
+  --bucket ${BUCKET_NAME} \
+  --output=json \
+  --query='{Objects: Versions[].{Key:Key,VersionId:VersionId}}')"
 
 aws s3 rb s3://${BUCKET_NAME} --force
+

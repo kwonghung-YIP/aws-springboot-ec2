@@ -54,9 +54,41 @@ Mappings:
         - subnet-081aac5a690b7a1a8
 
 Conditions:
-  LaunchALB: !Equals ["1","2"]
+  LaunchALB: !Equals ["1","1"]
 
 Resources:
+  IAMInstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Roles:
+        - !Ref CodeDeployEC2InstanceRole
+
+  CodeDeployEC2InstanceRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      Description: IAM EC2 Instance Profile
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - "sts:AssumeRole"
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+      Policies:
+        - PolicyName: S3Bucket
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:Get*
+                  - s3:List*
+                Resource: !Sub 
+                  - "${artifacts_bucket_arn}/*"
+                  - artifacts_bucket_arn: !GetAtt SpringbootArtifactsBucket.Arn
+
   SshKey:
     Type: "AWS::EC2::KeyPair"
     Properties:
@@ -74,7 +106,8 @@ Resources:
       GroupName: ssh-security-group
       GroupDescription: Allowing incoming ssh access from my remote IP
       SecurityGroupIngress:
-        - CidrIp: !Ref MyIpAddress #either one must be defined CidrIp, CidrIpv6, SourcePrefixListId, SourceSecurityGroupId
+        - #CidrIp: !Ref MyIpAddress #either one must be defined CidrIp, CidrIpv6, SourcePrefixListId, SourceSecurityGroupId
+          CidrIp: 0.0.0.0/0 # allow all IP source including codedeploy-agent-service
           IpProtocol: tcp
           FromPort: 22
           ToPort: 22
@@ -147,6 +180,8 @@ Resources:
             Tags:
               - Key: "Name"
                 Value: "springboot-instance"
+        IamInstanceProfile: 
+          Arn: !GetAtt IAMInstanceProfile.Arn
         #
         # cfn-init reference: https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/cfn-init.html
         #
@@ -335,6 +370,6 @@ Outputs:
     Condition: LaunchALB
     Description: Testing URL to Application Load Balancer
     Value: !Sub 
-      - "http://${ALBDnsName}/"
+      - "http://${ALBDnsName}:8080/echo?name=john"
       - ALBDnsName: !GetAtt SpringbootALB.DNSName
 

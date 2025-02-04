@@ -14,12 +14,12 @@ aws s3 rb s3://amzn-s3-demo-bucket --force
 sudo cfn-init -v \
     --stack=springboot-ec2-stack \
     --region=eu-north-1 \
-    --resource=springbootLaunchTemplate
+    --resource=SpringbootLaunchTemplate
 
 sudo cfn-get-metadata \
     --stack=springboot-ec2-stack \
     --region=eu-north-1 \
-    --resource=springbootLaunchTemplate
+    --resource=SpringbootLaunchTemplate
 ```
 
 ## Install codedeploy-agent locally
@@ -40,3 +40,4 @@ aws deploy create-deployment \
 - [Install the CodeDeploy agent for Amazon Linux or RHEL](https://docs.aws.amazon.com/codedeploy/latest/userguide/codedeploy-agent-operations-install-linux.html)
 - [Resource kit bucket names by Region](https://docs.aws.amazon.com/codedeploy/latest/userguide/resource-kit.html#resource-kit-bucket-names)
 - [AWS CodeDeploy - AppSpec 'hooks' section](https://docs.aws.amazon.com/codedeploy/latest/userguide/reference-appspec-file-structure-hooks.html#appspec-hooks-server)
+- [Step 4: Create an IAM instance profile for your Amazon EC2 instances](https://docs.aws.amazon.com/codedeploy/latest/userguide/getting-started-create-iam-instance-profile.html)

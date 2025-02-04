@@ -2,10 +2,10 @@ version: 0.0
 os: linux
 
 files:
-  - source: hooks/
-    destination: /application/scripts
+  - source: /
+    destination: /springboot-app
 permissions:
-  - object: /application/scripts
+  - object: /springboot-app/hooks
     pattern: "*.sh"
     mode: 744
 file_exists_behaviour: OVERWRITE
