@@ -3,3 +3,4 @@
 03-springboot-ec2-codedeploy/simple-springboot-app/mvnw
 03-springboot-ec2-codedeploy/simple-springboot-app/mvnw.cmd
 03-springboot-ec2-codedeploy/simple-springboot-app/.mvn/wrapper/maven-wrapper.properties
+03-springboot-ec2-codedeploy/cloudformation/application.tar

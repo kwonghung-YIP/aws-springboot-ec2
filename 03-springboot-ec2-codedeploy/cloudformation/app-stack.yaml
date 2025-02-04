@@ -54,7 +54,7 @@ Mappings:
         - subnet-081aac5a690b7a1a8
 
 Conditions:
-  LaunchALB: !Equals ["1","1"]
+  LaunchALB: !Equals ["1","2"]
 
 Resources:
   IAMInstanceProfile:
@@ -76,6 +76,9 @@ Resources:
             Principal:
               Service:
                 - ec2.amazonaws.com
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
       Policies:
         - PolicyName: S3Bucket
           PolicyDocument:
@@ -137,6 +140,7 @@ Resources:
 
   SpringbootLaunchTemplate:
     Type: "AWS::EC2::LaunchTemplate"
+    DependsOn: IAMInstanceProfile
     Metadata:
       #
       # AWS::CloudFormation::Init Reference
@@ -149,6 +153,7 @@ Resources:
               ruby3.2.x86_64: []
               java-21-amazon-corretto-devel.x86_64: []
               maven-amazon-corretto21: []
+              amazon-cloudwatch-agent: []
           files:
             "/home/ec2-user/install":
               source: !Sub 
@@ -157,15 +162,62 @@ Resources:
                   region_identifier: eu-north-1
                   version: latest
               mode: "000755"
+            "/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json":
+              content: >
+                {
+                  "agent": {
+                    "metrics_collection_interval": 30,
+                    "run_as_user": "cwagent"
+                  },
+                  "logs": {
+                    "logs_collected": {
+                      "files": {
+                      "collect_list": [
+                        {
+                        "file_path": "/springboot-app/app.log",
+                        "log_group_class": "STANDARD",
+                        "log_group_name": "app.log",
+                        "log_stream_name": "{instance_id}",
+                        "retention_in_days": 1
+                        }
+                      ]
+                      }
+                    }
+                  },
+                  "metrics": {
+                    "metrics_collected": {
+                      "disk": {
+                      "measurement": [
+                        "used_percent"
+                      ],
+                      "metrics_collection_interval": 30,
+                      "resources": [
+                        "*"
+                      ]
+                      },
+                      "mem": {
+                      "measurement": [
+                        "mem_used_percent"
+                      ],
+                      "metrics_collection_interval": 30
+                      }
+                    }
+                  }
+                }
           commands:
             install-codedeploy-agent:
               command: "./install auto"
               cwd: "/home/ec2-user"
+            start-cloudwatch-agent:
+              command: amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s
+              cwd: "/opt/aws/amazon-cloudwatch-agent/bin/"
           services:
             systemd:
               codedeploy-agent:
                 enabled: "true"
                 ensureRunning: "true"
+              amazon-cloudwatch-agent:
+                enabled: "true"
     Properties:
       LaunchTemplateName: !Sub "${AWS::StackName}-springboot-ec2-launch-template"
       LaunchTemplateData:
