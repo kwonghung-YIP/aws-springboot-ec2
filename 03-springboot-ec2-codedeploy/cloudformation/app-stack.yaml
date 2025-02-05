@@ -64,7 +64,7 @@ Mappings:
         - subnet-081aac5a690b7a1a8
 
 Conditions:
-  LaunchALB: !Equals ["1","2"]
+  LaunchALB: !Equals ["1","1"]
   CreateGitHubConnection: !Equals [!Ref GitHubConnectionArn, ""]
 
 Resources:
@@ -498,10 +498,11 @@ Resources:
                   - codedeploy:GetDeployment
                   - codedeploy:StopDeployment
                   - codedeploy:ContinueDeployment
-                Resource: !Sub 
-                    - "arn:${AWS::Partition}:codedeploy:${AWS::Region}:${AWS::AccountId}:deploymentgroup:${APP_NANE}/${DEPLOY_GRP_NAME}"
+                Resource: 
+                  - !Sub
+                    - "arn:${AWS::Partition}:codedeploy:${AWS::Region}:${AWS::AccountId}:deploymentgroup:${APP_NAME}/${DEPLOY_GRP_NAME}"
                     - APP_NAME: !Ref CodeDeployApplication
-                      DEPLY_GRP_NAME: !Ref CodeDeployDeploymentGroup
+                      DEPLOY_GRP_NAME: !Ref CodeDeployDeploymentGroup
               - Effect: Allow
                 Action:
                   - codedeploy:GetDeploymentConfig
@@ -510,9 +511,10 @@ Resources:
               - Effect: Allow
                 Action:
                   - codedeploy:RegisterApplicationRevision
-                Resource: !Sub
-                  - "arn:${AWS::Partition}:codedeploy:{AWS::Region}:{AWS::AccountId}:application:${APP_NAME}"
-                  - APP_NAME: !Ref CodeDeployApplication
+                Resource: 
+                  - !Sub
+                    - "arn:${AWS::Partition}:codedeploy:${AWS::Region}:${AWS::AccountId}:application:${APP_NAME}"
+                    - APP_NAME: !Ref CodeDeployApplication
 
   Pipeline:
     DependsOn: SpringbootTargetGroup
