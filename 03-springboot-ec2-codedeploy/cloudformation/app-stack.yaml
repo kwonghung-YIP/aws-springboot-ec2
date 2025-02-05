@@ -498,20 +498,24 @@ Resources:
                   - codedeploy:GetDeployment
                   - codedeploy:StopDeployment
                   - codedeploy:ContinueDeployment
-                Resource:
-                  - "*" #!Ref CodeDeployDeploymentGroup
+                Resource: !Sub 
+                    - "arn:${AWS::Partition}:codedeploy:${AWS::Region}:${AWS::AccountId}:deploymentgroup:${APP_NANE}/${DEPLOY_GRP_NAME}"
+                    - APP_NAME: !Ref CodeDeployApplication
+                      DEPLY_GRP_NAME: !Ref CodeDeployDeploymentGroup
               - Effect: Allow
                 Action:
                   - codedeploy:GetDeploymentConfig
                 Resource:
-                  - arn:aws:codedeploy:eu-north-1:796973491384:deploymentconfig:*
+                  - !Sub arn:${AWS::Partition}:codedeploy:${AWS::Region}:${AWS::AccountId}:deploymentconfig:*
               - Effect: Allow
                 Action:
                   - codedeploy:RegisterApplicationRevision
-                Resource:
-                  - "*" #!Ref CodeDeployApplication
+                Resource: !Sub
+                  - "arn:${AWS::Partition}:codedeploy:{AWS::Region}:{AWS::AccountId}:application:${APP_NAME}"
+                  - APP_NAME: !Ref CodeDeployApplication
 
   Pipeline:
+    DependsOn: SpringbootTargetGroup
     Type: AWS::CodePipeline::Pipeline
     Properties:
       ArtifactStore:
