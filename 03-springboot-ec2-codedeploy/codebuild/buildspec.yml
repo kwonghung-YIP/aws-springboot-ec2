@@ -17,6 +17,7 @@ phases:
       - timeout 15 sh -c "until docker info; do echo .; sleep 1; done"
   build:
     commands:
+      - id
       - pwd
       #- ls -la
       - cd 03-springboot-ec2-codedeploy/simple-springboot-app
@@ -29,3 +30,6 @@ artifacts:
     - "appspec.yml"
     - "hooks/*"
     - "*.jar"
+cache:
+  paths:
+    - '/root/.m2/**/*'
