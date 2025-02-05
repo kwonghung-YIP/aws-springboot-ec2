@@ -54,7 +54,7 @@ Mappings:
         - subnet-081aac5a690b7a1a8
 
 Conditions:
-  LaunchALB: !Equals ["1","2"]
+  LaunchALB: !Equals ["1","1"]
 
 Resources:
   IAMInstanceProfile:
