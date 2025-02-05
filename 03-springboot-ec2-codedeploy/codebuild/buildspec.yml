@@ -21,7 +21,9 @@ phases:
       #- ls -la
       - cd 03-springboot-ec2-codedeploy/simple-springboot-app
       - mvn -U clean package
-      - cp target/*.jar ../codedeploy
-      - cd ../cloudformation
-      - rm application.tar*
-      - tar -cvf application.tar -C ../codedeploy .
+artifacts:
+  name: application.tar
+  base-directory: 03-springboot-ec2-codedeploy
+  files:
+    - simple-springboot-app/target/*.jar
+    - codedeploy/**/*
