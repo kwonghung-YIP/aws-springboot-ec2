@@ -661,6 +661,10 @@ Resources:
         # GITLAB | GITLAB_SELF_MANAGED | NO_SOURCE | S3
         Type: CODEPIPELINE
         BuildSpec: 03-springboot-ec2-codedeploy/codebuild/buildspec.yml
+      Cache:
+        Type: LOCAL # NO_CACHE|S3|LOCAL
+        Modes:
+          - LOCAL_CUSTOM_CACHE # LOCAL_SOURCE_CACHE|LOCAL_DOCKER_LAYER_CACHE|LOCAL_CUSTOM_CACHE
 
 Outputs:
   sshKeyPairId:
