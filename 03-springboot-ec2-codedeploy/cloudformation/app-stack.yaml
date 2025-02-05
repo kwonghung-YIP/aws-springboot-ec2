@@ -44,6 +44,16 @@ Parameters:
     Type: String
     Default: "springboot-ec2-stack-artifacts-bucket"
 
+  GitHubConnectionArn:
+    Type: String
+    Default: "arn:aws:codeconnections:eu-north-1:796973491384:connection/1b0b695e-3d55-463e-a46e-5e7586e4cdc0"
+  GitHubRepo:
+    Type: String
+    Default: "kwonghung-YIP/aws-springboot-ec2"
+  GitHubSourceBranch:
+    Type: String
+    Default: "main"
+
 Mappings:
   RegionConfigMap:
     eu-north-1:
@@ -54,7 +64,8 @@ Mappings:
         - subnet-081aac5a690b7a1a8
 
 Conditions:
-  LaunchALB: !Equals ["1","1"]
+  LaunchALB: !Equals ["1","2"]
+  CreateGitHubConnection: !Equals [!Ref GitHubConnectionArn, ""]
 
 Resources:
   IAMInstanceProfile:
@@ -409,6 +420,205 @@ Resources:
           Key: Name
           Value: springboot-instance
       ServiceRoleArn: !GetAtt CodeDeployServiceRole.Arn
+
+  GitHubCodeStarConnection:
+    Condition: CreateGitHubConnection
+    Type: AWS::CodeStarConnections::Connection
+    Properties:
+      ConnectionName: GitHubConnection
+      ProviderType: GitHub
+
+  PipelineDefaultRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: >
+        IAM Role for CodePipeline to use to either perform actions with no actionRoleArn, 
+        or to use to assume roles for actions with an actionRoleArn. Assign to 
+        "AWS::CodePipeline::Pipeline" "RoleArn" property
+
+        Reference:
+        https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-codepipeline-pipeline.html#cfn-codepipeline-pipeline-rolearn
+      
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - "sts:AssumeRole"
+            Principal:
+              Service:
+                - codepipeline.amazonaws.com
+      Policies:
+        - PolicyName: codestarconnections
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "codestar-connections:UseConnection"
+                Resource: !If [CreateGitHubConnection, !Ref GitHubCodeStarConnection, !Ref GitHubConnectionArn]
+        - PolicyName: artifactsbucket
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "s3:PutObject"
+                  - "s3:GetObject"
+                  - "s3:GetObjectVersion"
+                Resource: 
+                  Fn::Sub: ${SpringbootArtifactsBucket.Arn}/*
+        - PolicyName: iamrole
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "iam:PassRole"
+                Resource: 
+                  - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/*"
+        - PolicyName: codebuild
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "codebuild:StartBuild"
+                  - "codebuild:BatchGetBuilds"
+                Resource:
+                  - !GetAtt CodeBuildProjectMavenBuild.Arn
+
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      ArtifactStore:
+        Location: !Ref SpringbootArtifactsBucket
+        Type: S3
+      #
+      # The Amazon Resource Name (ARN) for CodePipeline to use to either perform actions with no actionRoleArn, or to use to assume roles for actions with an actionRoleArn.
+      # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-codepipeline-pipeline.html#cfn-codepipeline-pipeline-rolearn
+      #
+      RoleArn: !GetAtt PipelineDefaultRole.Arn
+      # Indicates whether to rerun the CodePipeline pipeline after you update it.
+      RestartExecutionOnUpdate: false
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: clone-from-github-repo
+              ActionTypeId:
+                Category: Source # Source|Build|Test|Deploy|Invoke|Approval|Compute
+                Owner: AWS # AWS|ThridParty|Custom
+                #
+                # Valid action providers in CodePipeline
+                # https://docs.aws.amazon.com/codepipeline/latest/userguide/actions-valid-providers.html
+                #
+                Provider: CodeStarSourceConnection
+                Version: "1"
+              #
+              # Action Provider: CodeStarSourceConnetion for GitHub
+              # https://docs.aws.amazon.com/codepipeline/latest/userguide/action-reference-CodestarConnectionSource.html
+              #
+              Configuration:
+                ConnectionArn: !If [CreateGitHubConnection, !Ref GitHubCodeStarConnection, !Ref GitHubConnectionArn]
+                FullRepositoryId: !Ref GitHubRepo
+                BranchName: !Ref GitHubSourceBranch
+                OutputArtifactFormat: CODE_ZIP #CODE_ZIP|CODEBUILD_CLONE_REF
+              #
+              # Valid input and output artifacts for each action type
+              # https://docs.aws.amazon.com/codepipeline/latest/userguide/reference-action-artifacts.html
+              #
+              OutputArtifacts:
+                - Name: GitHubSourceZip
+        - Name: Build
+          Actions:
+            - Name: maven-build
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: "1"
+              Configuration:
+                ProjectName: !Ref CodeBuildProjectMavenBuild
+              InputArtifacts:
+                - Name: GitHubSourceZip
+              OutputArtifacts:
+                - Name: AppBuildArtifactZip
+
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - "sts:AssumeRole"
+            Principal:
+              Service:
+                - codebuild.amazonaws.com
+      Policies:
+        - PolicyName: cloudwatchlogs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "logs:CreateLogStream"
+                  - "logs:CreateLogGroup"
+                  - "logs:PutLogEvents"
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*"
+        - PolicyName: artifactbucket
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "s3:GetObject"
+                  - "s3:GetObjectVersion"
+                  - "s3:PutObject"
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:s3:::${SpringbootArtifactsBucket}/*"
+        - PolicyName: sts
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "sts:AssumeRole"
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/*"
+
+  CodeBuildProjectMavenBuild:
+    #
+    # AWS::CodeBuild::Project Configuration Reference
+    # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-codebuild-project.html
+    #
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Description: >
+        Build and Test Springboot with Maven
+      Artifacts:
+        Type: CODEPIPELINE # CODEPIPELINE|S3|NO_ARTIFACTS
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        #
+        # Docker Images provided by Code Build
+        # https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-available.html
+        #
+        Image: aws/codebuild/amazonlinux-x86_64-standard:5.0
+        # Enable running Docker daemon in a Docker container
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: APP_TEMPLATE
+            Value: template.yaml
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+      Source:
+        # BITBUCKET | CODECOMMIT | CODEPIPELINE | GITHUB | GITHUB_ENTERPRISE
+        # GITLAB | GITLAB_SELF_MANAGED | NO_SOURCE | S3
+        Type: CODEPIPELINE
+        BuildSpec: 03-springboot-ec2-codedeploy/codebuild/buildspec.yml
 
 Outputs:
   sshKeyPairId:
