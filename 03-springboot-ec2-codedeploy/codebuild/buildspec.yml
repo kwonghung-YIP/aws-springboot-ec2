@@ -26,6 +26,6 @@ artifacts:
   name: AppPackageZip
   base-directory: 03-springboot-ec2-codedeploy/codedeploy
   files:
-    - appspec.yml
-    - hooks/*
-    - *.jar
+    - "appspec.yml"
+    - "hooks/*"
+    - "*.jar"
