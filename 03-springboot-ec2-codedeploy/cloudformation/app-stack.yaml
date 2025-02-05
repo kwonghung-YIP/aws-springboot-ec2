@@ -542,7 +542,9 @@ Resources:
               InputArtifacts:
                 - Name: GitHubSourceZip
               OutputArtifacts:
-                - Name: application.zip
+                - Name: AppPackageZip
+        - Name: Deploy
+          Actions:
             - Name: codedeploy
               ActionTypeId:
                 Category: Deploy
@@ -553,7 +555,7 @@ Resources:
                 ApplicationName: !Ref CodeDeployApplication
                 DeploymentGroupName: !Ref CodeDeployDeploymentGroup
               InputArtifacts:
-                - Name: application.zip
+                - Name: AppPackageZip
 
   CodeBuildServiceRole:
     Type: AWS::IAM::Role

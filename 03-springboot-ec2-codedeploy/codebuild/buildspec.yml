@@ -22,7 +22,7 @@ phases:
       - cd 03-springboot-ec2-codedeploy/simple-springboot-app
       - mvn -U clean package
 artifacts:
-  name: application.tar
+  name: AppPackageZip
   base-directory: 03-springboot-ec2-codedeploy
   files:
     - simple-springboot-app/target/*.jar
