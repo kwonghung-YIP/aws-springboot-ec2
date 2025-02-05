@@ -542,7 +542,20 @@ Resources:
               InputArtifacts:
                 - Name: GitHubSourceZip
               OutputArtifacts:
-                - Name: AppBuildArtifactZip
+                - Name: application.tar
+                - Files:
+                    - 03-springboot-ec2-codedeploy/cloudformation/application.tar
+            - Name: codedeploy
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CodeDeploy
+                Version: "1"
+              Configuration:
+                ApplicationName: !Ref CodeDeployApplication
+                DeploymentGroupName: !Ref CodeDeployDeploymentGroup
+              InputArtifacts:
+                - Name: application.tar
 
   CodeBuildServiceRole:
     Type: AWS::IAM::Role
