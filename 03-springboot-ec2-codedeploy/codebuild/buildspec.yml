@@ -21,9 +21,11 @@ phases:
       #- ls -la
       - cd 03-springboot-ec2-codedeploy/simple-springboot-app
       - mvn -U clean package
+      - cp target/*.jar ../codedeploy
 artifacts:
   name: AppPackageZip
-  base-directory: 03-springboot-ec2-codedeploy
+  base-directory: 03-springboot-ec2-codedeploy/codedeploy
   files:
-    - simple-springboot-app/target/*.jar
-    - codedeploy/**/*
+    - appspec.yml
+    - hooks/**
+    - *.jar

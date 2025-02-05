@@ -493,12 +493,22 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
-                  - "codedeploy:CreateDeployment"
-                  - "codedeploy:GetDeployment"
-                  - "codedeploy:StopDeployment"
-                  - "codedeploy:ContinueDeployment"
+                  - codedeploy:CreateDeployment
+                  - codedeploy:GetDeployment
+                  - codedeploy:StopDeployment
+                  - codedeploy:ContinueDeployment
                 Resource:
                   - !GetAtt CodeDeployDeploymentGroup.Arn
+              - Effect: Allow
+                Action:
+                  - codedeploy:GetDeploymentConfig
+                Resource:
+                  - arn:aws:codedeploy:eu-north-1:796973491384:deploymentconfig:*
+              - Effect: Allow
+                Action:
+                  - codedeploy:RegisterApplicationRevision
+                Resource:
+                  - !GetAtt CodeDeployApplication.Arn
 
   Pipeline:
     Type: AWS::CodePipeline::Pipeline
