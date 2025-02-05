@@ -203,8 +203,8 @@ Resources:
           ToPort: 8080
 
   SpringbootLaunchTemplate:
-    Type: "AWS::EC2::LaunchTemplate"
     DependsOn: IAMInstanceProfile
+    Type: "AWS::EC2::LaunchTemplate"
     Metadata:
       #
       # AWS::CloudFormation::Init Reference
@@ -429,6 +429,7 @@ Resources:
       ProviderType: GitHub
 
   PipelineDefaultRole:
+    #DependsOn: CodeDeployDeploymentGroup
     Type: AWS::IAM::Role
     Properties:
       Description: >
@@ -498,7 +499,7 @@ Resources:
                   - codedeploy:StopDeployment
                   - codedeploy:ContinueDeployment
                 Resource:
-                  - !GetAtt CodeDeployDeploymentGroup.Arn
+                  - "*" #!Ref CodeDeployDeploymentGroup
               - Effect: Allow
                 Action:
                   - codedeploy:GetDeploymentConfig
@@ -508,7 +509,7 @@ Resources:
                 Action:
                   - codedeploy:RegisterApplicationRevision
                 Resource:
-                  - !GetAtt CodeDeployApplication.Arn
+                  - "*" #!Ref CodeDeployApplication
 
   Pipeline:
     Type: AWS::CodePipeline::Pipeline

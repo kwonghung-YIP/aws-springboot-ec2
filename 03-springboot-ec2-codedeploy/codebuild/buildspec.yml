@@ -27,5 +27,5 @@ artifacts:
   base-directory: 03-springboot-ec2-codedeploy/codedeploy
   files:
     - appspec.yml
-    - hooks/**
+    - hooks/*
     - *.jar
