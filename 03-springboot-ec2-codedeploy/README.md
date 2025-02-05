@@ -36,6 +36,10 @@ aws deploy create-deployment \
     --s3-location bucket=springboot-ec2-stack-springbootartifactsbucket-wvkav1gfsryi,key=application.zip,bundleType=zip
 ```
 
+```bash
+aws logs describe-log-groups \
+    --query 'logGroups[].logGroupName' --output text
+```
 ## Reference
 - [Install the CodeDeploy agent for Amazon Linux or RHEL](https://docs.aws.amazon.com/codedeploy/latest/userguide/codedeploy-agent-operations-install-linux.html)
 - [Resource kit bucket names by Region](https://docs.aws.amazon.com/codedeploy/latest/userguide/resource-kit.html#resource-kit-bucket-names)

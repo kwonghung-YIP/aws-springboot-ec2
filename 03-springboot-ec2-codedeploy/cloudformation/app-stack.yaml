@@ -92,6 +92,59 @@ Resources:
                   - "${artifacts_bucket_arn}/*"
                   - artifacts_bucket_arn: !GetAtt SpringbootArtifactsBucket.Arn
 
+  EC2CloudWatchAgentConfig:
+    #
+    # AWS::SSM::Parameter Reference
+    # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ssm-parameter.html
+    #
+    Type: "AWS::SSM::Parameter"
+    Properties:
+      Name: cloudwatch-agent-config
+      Description: CloudWatch Agent Config for EC2 instance
+      Tier: Standard # Standard|Advanced|Intelligent-Tiering
+      Type: String # String|StringList
+      DataType: text # text|aws:ec2:image
+      Value: >
+        {
+          "agent": {
+            "metrics_collection_interval": 30,
+            "run_as_user": "cwagent"
+          },
+          "logs": {
+            "logs_collected": {
+              "files": {
+              "collect_list": [
+                {
+                "file_path": "/springboot-app/app.log",
+                "log_group_class": "STANDARD",
+                "log_group_name": "springboot.log",
+                "log_stream_name": "{instance_id}",
+                "retention_in_days": 1
+                }
+              ]
+              }
+            }
+          },
+          "metrics": {
+            "metrics_collected": {
+              "disk": {
+              "measurement": [
+                "used_percent"
+              ],
+              "metrics_collection_interval": 30,
+              "resources": [
+                "*"
+              ]
+              },
+              "mem": {
+              "measurement": [
+                "mem_used_percent"
+              ],
+              "metrics_collection_interval": 30
+              }
+            }
+          }
+        }
   SshKey:
     Type: "AWS::EC2::KeyPair"
     Properties:
@@ -162,54 +215,15 @@ Resources:
                   region_identifier: eu-north-1
                   version: latest
               mode: "000755"
-            "/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json":
-              content: >
-                {
-                  "agent": {
-                    "metrics_collection_interval": 30,
-                    "run_as_user": "cwagent"
-                  },
-                  "logs": {
-                    "logs_collected": {
-                      "files": {
-                      "collect_list": [
-                        {
-                        "file_path": "/springboot-app/app.log",
-                        "log_group_class": "STANDARD",
-                        "log_group_name": "app.log",
-                        "log_stream_name": "{instance_id}",
-                        "retention_in_days": 1
-                        }
-                      ]
-                      }
-                    }
-                  },
-                  "metrics": {
-                    "metrics_collected": {
-                      "disk": {
-                      "measurement": [
-                        "used_percent"
-                      ],
-                      "metrics_collection_interval": 30,
-                      "resources": [
-                        "*"
-                      ]
-                      },
-                      "mem": {
-                      "measurement": [
-                        "mem_used_percent"
-                      ],
-                      "metrics_collection_interval": 30
-                      }
-                    }
-                  }
-                }
+
           commands:
             install-codedeploy-agent:
               command: "./install auto"
               cwd: "/home/ec2-user"
             start-cloudwatch-agent:
-              command: amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s
+              command: !Sub 
+                - "amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c ssm:${ssm_param_name} -s"
+                - ssm_param_name: !Ref EC2CloudWatchAgentConfig
               cwd: "/opt/aws/amazon-cloudwatch-agent/bin/"
           services:
             systemd:

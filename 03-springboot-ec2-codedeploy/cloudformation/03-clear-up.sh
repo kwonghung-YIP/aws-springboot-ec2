@@ -24,3 +24,11 @@ aws s3api delete-objects --bucket ${BUCKET_NAME} \
 
 aws s3 rb s3://${BUCKET_NAME} --force
 
+for LOG_GROUP in $(aws logs describe-log-groups \
+    --query 'logGroups[].logGroupName' --output text)
+do
+    #echo ${LOG_GROUP}
+    aws logs delete-log-group \
+        --log-group-name ${LOG_GROUP}
+done
+
