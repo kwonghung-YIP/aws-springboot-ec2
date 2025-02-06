@@ -1,3 +1,7 @@
+## Features covered in this example
+- The first trial for using CloudFormation template to deploy a EC2 instance
+- Able to remote login into with ssh
+
 ```bash
 aws ssm get-parameters-by-path \
     --path /aws/service/ami-amazon-linux-latest \

@@ -1,0 +1,73 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "cloudformation",
+            "Effect": "Allow",
+            "Action": [
+                "cloudformation:DescribeStacks",
+                "cloudformation:CreateStack",
+                "cloudformation:DeleteStack",
+                "cloudformation:CreateChangeSet",
+                "cloudformation:ExecuteChangeSet",
+                "cloudformation:DescribeChangeSet",
+                "cloudformation:GetTemplateSummary",
+                "cloudformation:DescribeStackEvents",
+                "cloudformation:GetTemplate"
+            ],
+            "Resource": [
+                "arn:aws:cloudformation:eu-north-1:796973491384:stack/*"
+            ]
+        },
+        {
+            "Sid": "codestarconnections",
+            "Effect": "Allow",
+            "Action": [
+                "codestar-connections:CreateConnection",
+                "codestar-connections:DeleteConnection",
+                "codestar-connections:PassConnection"
+            ],
+            "Resource": [
+                "arn:aws:codestar-connections:eu-north-1:796973491384:*"
+            ]
+        },
+        {
+            "Sid": "s3bucket",
+            "Effect": "Allow",
+            "Action": [
+                "s3:DeleteBucket",
+                "s3:CreateBucket",
+                "s3:PutEncryptionConfiguration",
+                "s3:PutBucketVersioning"
+            ],
+            "Resource": [
+                "arn:aws:s3:::*"
+            ]
+        },
+        {
+            "Sid": "iam",
+            "Effect": "Allow",
+            "Action": [
+                "iam:CreateRole",
+                "iam:DeleteRole",
+                "iam:GetRole",
+                "iam:PassRole"
+            ],
+            "Resource": [
+                "arn:aws:iam::796973491384:role/*"
+            ]
+        },
+        {
+            "Sid": "codepipeline",
+            "Effect": "Allow",
+            "Action": [
+                "codepipeline:CreatePipeline",
+                "codepipeline:DeletePipeline",
+                "codepipeline:GetPipeline"
+            ],
+            "Resource": [
+                "arn:aws:codepipeline:eu-north-1:796973491384:*"
+            ]
+        }
+    ]
+}
