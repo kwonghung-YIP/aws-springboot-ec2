@@ -17,7 +17,7 @@
 - Just run the following script that will deploy the stack, and download the new SSH Key into the home folder.
 - The CodePipeline with be triggered after create and deploy the springboot application.
 
-cloudformation/(01-launch-stack.sh)[cloudformation/01-launch-stack.sh]
+cloudformation/[01-launch-stack.sh](cloudformation/01-launch-stack.sh)
 
 ## Invoke the CodeDeploy via AWS CLI and deploy from local
 
@@ -26,7 +26,7 @@ cloudformation/(01-launch-stack.sh)[cloudformation/01-launch-stack.sh]
 - Upload the package to the S3 artifacts bucket created in the stack
 - Invoke the CodeDeploy by AWS CLI
 
-cloudformation/(02-deploy.sh)[cloudformation/02-deploy.sh]
+cloudformation/[02-deploy.sh](cloudformation/02-deploy.sh)
 
 ## Clear up
 
@@ -34,7 +34,7 @@ cloudformation/(02-deploy.sh)[cloudformation/02-deploy.sh]
 - Empty the artifact bucket and delete it
 - Delete all CloudWatch log groups
 
-cloudformation/(03-clear-up.sh)[cloudformation/03-clearup.sh]
+cloudformation/[03-clear-up.sh](cloudformation/03-clearup.sh)
 
 ## Other scripts
 ```bash
